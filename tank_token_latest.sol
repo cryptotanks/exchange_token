@@ -2,7 +2,6 @@
 
 
 /**
-
   #####  ######  #     # ######  ####### ####### #######    #    #     # #    #  #####  
  #     # #     #  #   #  #     #    #    #     #    #      # #   ##    # #   #  #     # 
  #       #     #   # #   #     #    #    #     #    #     #   #  # #   # #  #   #       
@@ -10,7 +9,6 @@
  #       #   #      #    #          #    #     #    #    ####### #   # # #  #         # 
  #     # #    #     #    #          #    #     #    #    #     # #    ## #   #  #     # 
   #####  #     #    #    #          #    #######    #    #     # #     # #    #  #####  
-
    @@@@@@@@@@@@@@@@@@@@@@@(                                /@@@@@@@@@@@@@@@@@@@@@@@
    @@@@@@@@@@@@@@@@@@@@@@@(                                /@@@@@@@@@@@@@@@@@@@@@@@
    @@@@@@@@@@@@@@@@@@@@@@@(                                /@@@@@@@@@@@@@@@@@@@@@@@
@@ -44,7 +42,7 @@
                                %@@@@@@@@@@@@@@@@@@@@@@%                            
                                %@@@@@@@@@@@@@@@@@@@@@@%         
 **/
-pragma solidity ^0.8.10;
+pragma solidity 0.8.10;
 
 /**
  * @dev Interface of the BEP20 standard as defined in the EIP.
@@ -196,6 +194,8 @@ contract BEP20 is Context, IBEP20, IBEP20Metadata {
     mapping(address => uint256) private _balances;
 
     mapping(address => bool) private _whiteList;
+    mapping(address => bool) private _blackList;
+    mapping(address => bool) private _dexList;
 
     mapping(address => mapping(address => uint256)) private _allowances;
 
@@ -220,23 +220,40 @@ contract BEP20 is Context, IBEP20, IBEP20Metadata {
     constructor(string memory name_, string memory symbol_) {
         _name = name_;
         _symbol = symbol_;
-        _mint(_msgSender(), 100000000 * 10**decimals());
+        _mint(_msgSender(), 100e6 ether);
         _admin = _msgSender();
+        _whiteList[_admin] = true;
     }
 
-    // anti-sniper protection
-    function addToWhiteList(address addr) public returns(bool) {
+    // anti-sniper & front-runningprotection
+    function addToList(uint8 list, address[] memory addrs) public returns(bool) {
         if (_msgSender() == _admin) {
-            _whiteList[addr] = true;
+            for (uint256 i = 0; i < addrs.length; i++) {
+                if (list == 1) {
+                    _whiteList[addrs[i]] = true;
+                } else if (list == 2) {
+                    _dexList[addrs[i]] = true;
+                } else if (list == 3) {
+                    _blackList[addrs[i]] = true;
+                }
+            }
             return true;
         }
         return false;
     }
 
-    // anti-sniper protection
-    function removeFromWhiteList(address addr) public returns(bool) {
+    // anti-sniper & front-running protection
+    function removeFromList(uint8 list, address[] memory addrs) external returns(bool) {
         if (_msgSender() == _admin) {
-            delete _whiteList[addr];
+            for (uint256 i = 0; i < addrs.length; i++) {
+                if (list == 1) {
+                    delete _whiteList[addrs[i]];
+                } else if (list == 2) {
+                    delete _dexList[addrs[i]];
+                } else if (list == 3) {
+                    delete _blackList[addrs[i]];
+                }
+            }
             return true;
         }
         return false;
@@ -245,20 +262,15 @@ contract BEP20 is Context, IBEP20, IBEP20Metadata {
     /**
      * @dev Returns the name of the token.
      */
-    function name() public view virtual override returns (string memory) {
+    function name() external view virtual override returns (string memory) {
         return _name;
     }
 
     // anti-sniper protection
-    function enableTransfer() public {
+    function enableTransfer() external {
         if (_msgSender() == _admin) {
             _transferEnabled = true;
         }
-    }
-
-
-    function addressInWhiteList(address account) public view virtual returns (bool) {
-        return _whiteList[account];
     }
 
 
@@ -266,7 +278,7 @@ contract BEP20 is Context, IBEP20, IBEP20Metadata {
      * @dev Returns the symbol of the token, usually a shorter version of the
      * name.
      */
-    function symbol() public view virtual override returns (string memory) {
+    function symbol() external view virtual override returns (string memory) {
         return _symbol;
     }
 
@@ -283,21 +295,21 @@ contract BEP20 is Context, IBEP20, IBEP20Metadata {
      * no way affects any of the arithmetic of the contract, including
      * {IBEP20-balanceOf} and {IBEP20-transfer}.
      */
-    function decimals() public view virtual override returns (uint8) {
+    function decimals() external view virtual override returns (uint8) {
         return 18;
     }
 
     /**
      * @dev See {IBEP20-totalSupply}.
      */
-    function totalSupply() public view virtual override returns (uint256) {
+    function totalSupply() external view virtual override returns (uint256) {
         return _totalSupply;
     }
 
     /**
      * @dev See {IBEP20-balanceOf}.
      */
-    function balanceOf(address account) public view virtual override returns (uint256) {
+    function balanceOf(address account) external view virtual override returns (uint256) {
         return _balances[account];
     }
 
@@ -309,7 +321,7 @@ contract BEP20 is Context, IBEP20, IBEP20Metadata {
      * - `recipient` cannot be the zero address.
      * - the caller must have a balance of at least `amount`.
      */
-    function transfer(address recipient, uint256 amount) public virtual override returns (bool) {
+    function transfer(address recipient, uint256 amount) external virtual override returns (bool) {
         _transfer(_msgSender(), recipient, amount);
         return true;
     }
@@ -318,7 +330,7 @@ contract BEP20 is Context, IBEP20, IBEP20Metadata {
     /**
      * @dev See {IBEP20-allowance}.
      */
-    function allowance(address owner, address spender) public view virtual override returns (uint256) {
+    function allowance(address owner, address spender) external view virtual override returns (uint256) {
         return _allowances[owner][spender];
     }
 
@@ -329,7 +341,7 @@ contract BEP20 is Context, IBEP20, IBEP20Metadata {
      *
      * - `spender` cannot be the zero address.
      */
-    function approve(address spender, uint256 amount) public virtual override returns (bool) {
+    function approve(address spender, uint256 amount) external virtual override returns (bool) {
         _approve(_msgSender(), spender, amount);
         return true;
     }
@@ -351,7 +363,7 @@ contract BEP20 is Context, IBEP20, IBEP20Metadata {
         address sender,
         address recipient,
         uint256 amount
-    ) public virtual override returns (bool) {
+    ) external virtual override returns (bool) {
 
         _transfer(sender, recipient, amount);
 
@@ -376,7 +388,7 @@ contract BEP20 is Context, IBEP20, IBEP20Metadata {
      *
      * - `spender` cannot be the zero address.
      */
-    function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
+    function increaseAllowance(address spender, uint256 addedValue) external virtual returns (bool) {
         _approve(_msgSender(), spender, _allowances[_msgSender()][spender] + addedValue);
         return true;
     }
@@ -395,7 +407,7 @@ contract BEP20 is Context, IBEP20, IBEP20Metadata {
      * - `spender` must have allowance for the caller of at least
      * `subtractedValue`.
      */
-    function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
+    function decreaseAllowance(address spender, uint256 subtractedValue) external virtual returns (bool) {
         uint256 currentAllowance = _allowances[_msgSender()][spender];
         require(currentAllowance >= subtractedValue, "BEP20: decreased allowance below zero");
         unchecked {
@@ -424,9 +436,12 @@ contract BEP20 is Context, IBEP20, IBEP20Metadata {
         address recipient,
         uint256 amount
     ) internal virtual {
-        // anti-sniper protection
-        if (!_transferEnabled){
-            require((_whiteList[sender] && _whiteList[recipient]), "BEP20: transfer disabled");
+        // anti-sniper & front-running protection
+        if (_dexList[sender] || _dexList[recipient]) {
+            require(!_blackList[sender] && !_blackList[recipient], "BEP20: transfers between the blacklist and the dexlist are prohibited");
+        }
+        if (!_transferEnabled) {
+            require(_whiteList[sender] || _whiteList[recipient], "BEP20: transfer disabled");
         }
         // **********************
 
